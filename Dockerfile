@@ -11,5 +11,3 @@ RUN npm install --silent
 COPY . .
 
 ENTRYPOINT [ "node", "main.js" ]
-
-CMD [ "node", "main.js" ]
