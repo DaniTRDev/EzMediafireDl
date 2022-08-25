@@ -110,9 +110,6 @@ class mediafireFile
 
     async queueDownload()
     {
-        //if (!fs.existsSync(path.join(__dirname, 'output/', this.filePath)))
-            //fs.mkdirSync(path.join(__dirname, 'output/', this.filePath));
-
         await downloader.pushDownload(this);
     }
 }
