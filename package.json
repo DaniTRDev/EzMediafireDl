@@ -26,6 +26,7 @@
     "cli-progress": "^3.11.2",
     "colors": "^1.4.0",
     "crc-32": "^1.2.2",
-    "nodejs-file-downloader": "^4.10.1"
+    "nodejs-file-downloader": "^4.10.1",
+    "package.json": "^2.0.1"
   }
 }
