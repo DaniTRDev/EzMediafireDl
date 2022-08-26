@@ -4,7 +4,8 @@
   "description": "It's a package that downloads a file or an entire folder from mediafire.com. If you submit a file link it will automatically extract its key and download it inside 'output' folder. And if you submit a folder link it will automatically extract its key, scan its subfolders (recursively) and files and will download them.",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node .",
+    "start:dev": "nodenv -f ."
   },
   "repository": {
     "type": "git",
