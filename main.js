@@ -9,6 +9,8 @@ const downloader                                = require('./asyncDownloader.js'
 
 const readline                                  = require('readline');
 
+require('dotenv').config(); /*load up the .env file*/
+
 const rl = readline.createInterface(
 {
     input: process.stdin,
