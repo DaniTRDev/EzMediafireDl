@@ -79,11 +79,13 @@ class apiRequest
         if (this.paramCount > 0)
             fullPath += '?' + this.queryParams;
 
+        this.queryParams = ''; /*clear query parameters since they have already been consumed in the url*/
+
         let request = https
         .request(fullPath, this.options, res => 
-            {
-                requestResultParser(res, callback);
-            })
+        {
+            requestResultParser(res, callback);
+        })
         .on('error', err => callback(undefined, err));
             
         if (data)
@@ -91,8 +93,11 @@ class apiRequest
     
         await request.end();
 
-        //console.log(`Submitting a ${this.options.method} request to: \n ${fullPath} 
-            //(Content-Type: ${this.options.headers["Content-Type"]}) (Content-Length: ${this.options.headers["Content-Length"]})`);
+        if (process.env.LOG_REQUESTS === true)
+        {
+            console.log(`Submitting a ${this.options.method} request to: \n ${fullPath} \n` + 
+                `Headers: \n${JSON.stringify(this.options.headers)}`);
+        }
     }
 
     async post(data, dataLenght, contentType, callback)
