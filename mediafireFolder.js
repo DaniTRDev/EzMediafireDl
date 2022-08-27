@@ -3,23 +3,41 @@ const fs                    = require('fs');
 const path                  = require('path');
 
 
-const asyncDownloader    = require('./asyncDownloader.js');
+const asyncDownloader       = require('./asyncDownloader.js');
 const { mediafireFile }     = require('./mediafireFile.js');
 const { apiRequest }        = require('./asyncApiRequests.js');
 
 const mfApiReq              = new apiRequest('https://www.mediafire.com/api/1.5');
 
-function setMediafireQueryParams(chunk, folderKey, getFolder)
+const mfFolderGetContentParams  = new URLSearchParams(
 {
-    mfApiReq.addQueryParam("folder_key", folderKey);
-    mfApiReq.addQueryParam("content_type", getFolder ? "folders" : "files");
-    mfApiReq.addQueryParam("filter", "all");
-    mfApiReq.addQueryParam("order_by", "name");
-    mfApiReq.addQueryParam("order_direction", "asc");
-    mfApiReq.addQueryParam("chunk", chunk);
-    mfApiReq.addQueryParam("details", "yes");
-    mfApiReq.addQueryParam("response_format", "json");
-    mfApiReq.addQueryParam("chunk_size", 1000);
+    "folder_key": 'NULL',
+    "content_type": 'NULL',
+    "filter": 'all',
+    "order_by": 'name',
+    "order_direction": 'asc',
+    "chunk": 0,
+    "details": "yes",
+    "response_format": 'json',
+    "chunk_size": 1000,
+
+});
+function setMfFolderContentParams(folderKey, chunk, getFolders)
+{
+    mfFolderGetContentParams.set("folder_key", folderKey);
+    mfFolderGetContentParams.set("content_type", getFolders ? "folders" : "files");
+    mfFolderGetContentParams.set("chunk", chunk);
+}
+
+const mfFolderGetInfoParams  = new URLSearchParams(
+{
+    "folder_key": 'NULL',
+    "details": "yes",
+    "response_format": 'json'
+});
+function setMfFolderInfoParams(folderKey)
+{
+    mfFolderGetInfoParams.set("folder_key", folderKey);
 }
 
 class mediafireFolder
@@ -32,142 +50,153 @@ class mediafireFolder
         this.folderCount = 0;
         this.subFolders = [];
         this.files = [];
-        this.folderChunk = 1;
-        this.fileChunk = 1;
+        this.foldersChunk = 1;
+        this.foldersMoreChunks = true;
+        this.filesMoreChunks = true;
+        this.filesChunk = 1;
         this.folderPath = (folderPath != undefined) ? folderPath : ''; /*used to create the folder in the computer*/
         this.downloaded = false;
+
+        this.rawFolderInfo = undefined;
     }
 
-    getFolderInfo(onFinishCb)
-    {        
+    async getFolderInfo()
+    {    
+        if (this.rawFolderInfo)
+            return this.rawFolderInfo;
+
         mfApiReq.setEndPoint("/folder/get_info.php");
-        mfApiReq.addQueryParam('folder_key', this.key);
-        mfApiReq.addQueryParam('response_format', 'json');
-        mfApiReq.addQueryParam('details', 'yes');
-
-        mfApiReq.get((res, err) => 
-        {
-            if (err)
-            {
-                console.log(`Error while fetching folder info! ${'Key'.underline}: ${this.key.cyan}`);
-                console.log(err);
-
-                return;
-            }
-
-            let response = JSON.parse(res).response;
-            let folderInfo = response.folder_info;
-
-            this.name = folderInfo.name;
-            this.folderCount = folderInfo.total_folders;
-            this.fileCount = folderInfo.total_files;
-            this.folderSize = folderInfo.total_size;
-
-            if (this.folderPath == '')/*if the folder has not a valid folderPath then it is the root folder*/
-                this.folderPath = this.name; 
-            
-            onFinishCb(folderInfo);
+        setMfFolderInfoParams(this.key);
+        
+        const res = await mfApiReq.get(mfFolderGetInfoParams)
+        .catch(err => 
+        { 
+            console.log(`Error while fetching folder info! (${'Folder key'.underline}: ${this.key.cyan})\n ${err}`);
+            return {};
         });
+
+        if (!res)
+            return {};
+
+        let response = (await res.json()).response;
+        let folderInfo = response.folder_info;
+
+        this.name = folderInfo.name;
+        this.folderCount = folderInfo.total_folders;
+        this.fileCount = folderInfo.total_files;
+        this.folderSize = folderInfo.total_size;
+        this.rawFolderInfo = folderInfo;
+
+        if (this.folderPath == '')/*if the folder has not a valid folderPath then it is the root folder*/
+            this.folderPath = this.name; 
+
+        return folderInfo;
     }
-    getFolders(onFinishCb)
+    async getFolders()
     {
+        if (!this.rawFolderInfo)
+            await this.getFolderInfo();
+
+        if (!this.foldersMoreChunks)
+            return this.subFolders;
+
         mfApiReq.setEndPoint("/folder/get_content.php");
-        setMediafireQueryParams(this.folderChunk, this.key, true);
+        setMfFolderContentParams(this.key, this.foldersChunk, true);
 
-        mfApiReq.get((res, err) => 
+        const res = await mfApiReq.get(mfFolderGetContentParams)
+        .catch(err => 
         {
-            if (err)
-            {
-                console.log(`Error while retrieving subfolders of ${this.name.cyan}`); 
-                console.log(err);
-
-                return;
-            }
-
-            let response = JSON.parse(res).response;
-            let folderContent = response.folder_content;
-            let folders = folderContent.folders;
-
-            if (folders) /*we need this check because maybe there arent sub folders in this folder*/
-            {
-                folders.forEach(folder => 
-                {
-                    for (let subFolder of this.subFolders)
-                    {
-                        if (subFolder.key === folder.folderkey) /*it's the same folder, don't add it*/
-                            return;
-                    }
-
-                    this.subFolders.push(new mediafireFolder(folder.folderkey, this.folderPath.concat('/', folder.name)));
-                });
-            }
-
-            if (folderContent.more_chunks === 'no')
-            {
-                onFinishCb(this); 
-                return; 
-            }
-            
-            this.folderChunk++;
-            this.getFolders(onFinishCb);
+            console.log(`Error while fetching sub folders! (${'Folder key'.underline}: ${this.key.magenta})\n ${err}`);
+            return {};
         });
+
+        if (!res)
+            return [];
+
+        let response = (await res.json()).response;
+        let folderContent = response.folder_content;
+        let folders = folderContent.folders;
+
+        if (folders) /*we need this check because maybe there arent sub folders in this folder so it will be undefined*/
+        {
+                for(let folder of folders)
+                {
+                    const mfFolder = new mediafireFolder(folder.folderkey, this.folderPath.concat('/', folder.name));
+                    await mfFolder.getFolders(); /*recursive folder fetcher*/
+                    await mfFolder.getFiles();
+
+                    this.subFolders.push(mfFolder);
+                }
+        }
+
+        this.folderChunk++;
+        this.foldersMoreChunks = (folderContent.more_chunks === 'yes');
+        return await this.getFolders();
     }
-    getFiles(onFinishCb)
+    async getFiles()
     {
+        if (!this.rawFolderInfo)
+            await this.getFolderInfo();
+
+        if (!this.filesMoreChunks)
+            return this.files;
+
         mfApiReq.setEndPoint("/folder/get_content.php");
-        setMediafireQueryParams(this.fileChunk, this.key, false);
+        setMfFolderContentParams(this.key, this.filesChunk, false);
 
-        mfApiReq.get((res, err) => 
+        const res = await mfApiReq.get(mfFolderGetContentParams)
+        .catch(err => 
         {
+            console.log(`Error while fetching files! (${'Folder key'.underline}: ${this.key.magenta})\n ${err}`);
+            return {}; 
+        }); 
+        
+        if (!res)
+            return [];
 
-            if (err)
-            {
-                console.log(`Error while files of ${this.name.cyan}`); 
-                console.log(err);
+        let response = (await res.json()).response;
+        let folderContent = response.folder_content;
+        let files = folderContent.files;
 
-                return;
-            }
-
-            let response = JSON.parse(res).response;
-            let folderContent = response.folder_content;
-            let files = folderContent.files;
-
-            if (files)
-            {
-                files.forEach(file => 
-                {
-                    this.files.push(new mediafireFile(file.quickkey, this.folderPath));
-                });
-            }
-
-            if (folderContent.more_chunks === 'no')
-            {
-                onFinishCb(this.files);
-                return; 
-            }
-            
-            this.folderChunk++;
-            this.getFiles(onFinishCb);
-        });
-    }
-
-    log()
-    {
-        console.log(`Fetched ${this.folderPath.cyan} (${'Key'.underline}: ${this.key.cyan}) (${'Folders'.underline}: ${this.folderCount.cyan}) (${'Files'.underline}: ${this.fileCount.cyan})`);
-    }
-
-    logSubFolders(logFolderFiles)
-    {
-        this.log();
-        this.subFolders.forEach(folder => 
+        if (files) /*we need this check because if there are not files in the folder 'files' will be undefined*/
         {
-            console.log(`\t -- ${this.folderPath.cyan} (${'Key'.underline}: ${this.key.cyan}) (${'Folders'.underline}: ${this.subFolders.length.cyan}) (${'Files'.underline}: ${this.files.length.cyan})`);
-        })
+            for(let file of files)
+            {  
+                const mfFile = new mediafireFile(file.quickkey, this.folderPath);
+                await mfFile.getFileInfo();
+
+                this.files.push(mfFile);
+            }
+        }
+        
+           
+        this.filesChunk++;
+        this.filesMoreChunks = (folderContent.more_chunks === 'yes');
+        return await this.getFiles();
     }
 
-    logFiles()
+    async log()
     {
-        this.files.forEach(file => file.log());
+        console.log(`Fetched ${this.folderPath.yellow} (${'Key'.underline}: ${this.key.magenta}) (${'Folders'.underline}: ${this.folderCount.cyan})` +
+        ` (${'Files'.underline}: ${this.fileCount.cyan})`);
+
+        for(let folder of await this.getFolders())
+            folder.log();
+        
+        for (let file of await this.getFiles())
+        {
+            await file.getFileInfo();
+            file.log();
+        }
+    }
+
+    async queueDownload()
+    {
+        for(let folder of await this.getFolders())
+            folder.queueDownload();
+    
+        for (let file of await this.getFiles())
+            file.queueDownload();
     }
 
 }
