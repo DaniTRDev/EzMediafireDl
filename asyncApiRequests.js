@@ -1,47 +1,20 @@
-const https = require('node:https');
+const fetch = require('node-fetch');
 
-
-async function requestResultParser(res, callback)
-{
-    let data = [];
-
-    if (res.statusCode != 200)
-    {
-        callback(undefined, `Error in the request; ErrorCode ${res.statusCode}; Message: ${res.statusMessage}`);
-        return;
-    }
-
-    await res.on('data', chunk => { data.push(chunk); });
-    await res.on('end', () => 
-    {
-        try 
-        {
-            callback(Buffer.concat(data).toString());
-        } 
-        catch (err) 
-        {
-            callback(undefined, err);
-        }
-        });
-}
 
 class apiRequest
 {
     constructor(apiUrl)
     {
-        this.apiUrl = apiUrl;
+        this.apiUrl = apiUrl
         this.endPoint = '';
-
-        this.queryParams = '';
-        this.paramCount = 0;
 
         this.options = 
         {
-            port: 443,
             method: '', /*post / get*/
+            body: undefined,
             headers: 
             {
-                'User-Agent': https.globalAgent
+
             }
         };
     }
@@ -49,16 +22,6 @@ class apiRequest
     addHeader(name, data)
     {
         this.options.headers[name] = data;
-    }
-
-    /* temporal, will be cleared after 'get' or 'post' is called */
-    addQueryParam(name, data)
-    {
-        if (this.paramCount > 0)
-            this.queryParams += '&';
-
-        this.queryParams += name.concat('=', data);
-        this.paramCount++;
     }
 
     setEndPoint(endpoint)
@@ -72,47 +35,36 @@ class apiRequest
         this.endPoint = workingEndPoint;
     }
 
-    async request(data, callback)
+    async request(params)
     {
-        let fullPath = this.apiUrl + this.endPoint;
+        const url = new URL(this.apiUrl + this.endPoint);
 
-        if (this.paramCount > 0)
-            fullPath += '?' + this.queryParams;
-
-        this.queryParams = ''; /*clear query parameters since they have already been consumed in the url*/
-
-        let request = https
-        .request(fullPath, this.options, res => 
-        {
-            requestResultParser(res, callback);
-        })
-        .on('error', err => callback(undefined, err));
+        if (params)
+            url.search = params;
             
-        if (data)
-            await request.write(data);
-    
-        await request.end();
-
         if (process.env.LOG_REQUESTS === true)
         {
             console.log(`Submitting a ${this.options.method} request to: \n ${fullPath} \n` + 
                 `Headers: \n${JSON.stringify(this.options.headers)}`);
         }
+
+        return await fetch(url, this.options)
+        .catch(err => { console.log(err); return {}});
     }
 
-    async post(data, dataLenght, contentType, callback)
+    post(params, data, contentType)
     {
         this.options.method = 'POST';
+        this.options.body = data;
         this.options.headers['Content-Type'] = contentType;
-        this.options.headers['Content-Lenght'] = dataLenght;
 
-        await this.request(data, callback);
+        return this.request(params);
     }
 
-    async get(callback)
+    get(params)
     {
         this.options.method = 'GET';
-        await this.request(undefined, callback);
+        return this.request(params);
     }
 }
 
