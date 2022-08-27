@@ -1,6 +1,6 @@
 {
   "name": "ezmediafiredl",
-  "version": "0.0.1",
+  "version": "2.0.0",
   "description": "It's a package that downloads a file or an entire folder from mediafire.com. If you submit a file link it will automatically extract its key and download it inside 'output' folder. And if you submit a folder link it will automatically extract its key, scan its subfolders (recursively) and files and will download them.",
   "main": "main.js",
   "scripts": {
@@ -27,7 +27,11 @@
     "cli-progress": "^3.11.2",
     "colors": "^1.4.0",
     "crc-32": "^1.2.2",
+    "dotenv": "^16.0.1",
+    "figlet": "^1.5.2",
+    "node-fetch": "^2.6.7",
     "nodejs-file-downloader": "^4.10.1",
-    "package.json": "^2.0.1"
+    "package.json": "^2.0.1",
+    "promisify-node": "^0.5.0"
   }
 }
