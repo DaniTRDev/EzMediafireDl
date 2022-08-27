@@ -1,13 +1,16 @@
 class download
 {
-    constructor(fileQuickHash, mfFile)
+    constructor(name, savePath, downloadLink, hash, size)
     {
         this.downloading = false;
         this.downloaded = false;
         this.checksumed = false;
 
-        this.fileQuickHash = fileQuickHash;
-        this.mfFile = mfFile;
+        this.name = name;
+        this.savePath = savePath
+        this.downloadLink = downloadLink;
+        this.hash = hash;
+        this.size = size;
     }
 }
 
