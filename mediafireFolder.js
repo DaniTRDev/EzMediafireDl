@@ -192,6 +192,12 @@ class mediafireFolder
 
     async queueDownload()
     {
+        /*create this directory in the computer*/
+        let fullPath = path.join(__dirname, 'output', this.folderPath);
+
+        if (!fs.existsSync(fullPath))
+            fs.mkdirSync(fullPath);
+
         for(let folder of await this.getFolders())
             folder.queueDownload();
     
